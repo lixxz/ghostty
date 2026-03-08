@@ -49,6 +49,11 @@ pub const Cell = struct {
     x_offset: i16 = 0,
     y_offset: i16 = 0,
 
+    /// The number of grid cells this shaped glyph spans. For most glyphs
+    /// this is 1, but for complex text shaping (e.g. Devanagari conjuncts)
+    /// a single shaped glyph may span multiple terminal cells.
+    cell_advance: u16 = 1,
+
     /// The glyph index for this cell. The font index to use alongside
     /// this cell is available in the text run. This glyph index is only
     /// valid for a given GroupCache and FontIndex that was used to create

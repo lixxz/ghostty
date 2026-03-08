@@ -379,12 +379,14 @@ pub const Shaper = struct {
         const line = typesetter.createLine(.{ .location = 0, .length = 0 });
         self.cf_release_pool.appendAssumeCapacity(line);
 
-        // This keeps track of the current offsets within a single cell.
-        var cell_offset: struct {
-            cluster: u32 = 0,
-            x: f64 = 0,
-            y: f64 = 0,
-        } = .{};
+        const ct_cell_width: f64 = @floatFromInt(run.grid.metrics.cell_width);
+
+        // Per-cluster offset tracking. Unlike the simple cell_offset approach,
+        // this handles CoreText's glyph reordering (e.g., Devanagari reph
+        // appears after its base character in glyph order despite having an
+        // earlier cluster index).
+        const cluster_offsets_x = try alloc.alloc(f64, run.cells);
+        @memset(cluster_offsets_x, 0);
 
         // Clear our cell buf and make sure we have enough room for the whole
         // line of glyphs, so that we can just assume capacity when appending
@@ -413,31 +415,83 @@ pub const Shaper = struct {
                 advances,
                 indices,
             ) |glyph, advance, index| {
-                // Our cluster is also our cell X position. If the cluster changes
-                // then we need to reset our current cell offsets.
+                // Use per-cluster offset tracking. Each cluster independently
+                // accumulates advances, so CoreText's glyph reordering
+                // (e.g., reph in Devanagari) doesn't cause incorrect offsets.
                 const cluster = state.codepoints.items[index].cluster;
-                if (cell_offset.cluster != cluster) pad: {
-                    // We previously asserted this but for rtl text this is
-                    // not true. So we check for this and break out. In the
-                    // future we probably need to reverse pad for rtl but
-                    // I don't have a solid test case for this yet so let's
-                    // wait for that.
-                    if (cell_offset.cluster > cluster) break :pad;
-
-                    cell_offset = .{ .cluster = cluster };
-                }
+                const cluster_x = cluster_offsets_x[cluster];
 
                 self.cell_buf.appendAssumeCapacity(.{
                     .x = @intCast(cluster),
-                    .x_offset = @intFromFloat(@round(cell_offset.x)),
-                    .y_offset = @intFromFloat(@round(cell_offset.y)),
+                    .x_offset = @intFromFloat(@round(cluster_x)),
+                    .y_offset = 0,
                     .glyph_index = glyph,
                 });
 
-                // Add our advances to keep track of our current cell offsets.
-                // Advances apply to the NEXT cell.
-                cell_offset.x += advance.width;
-                cell_offset.y += advance.height;
+                // Accumulate advance for this cluster
+                cluster_offsets_x[cluster] += advance.width;
+            }
+        }
+
+        // Sort cell_buf by x (cluster) to ensure monotonically increasing
+        // positions, which the renderer requires. CoreText may reorder glyphs
+        // (e.g., Devanagari reph) causing out-of-order clusters.
+        // Insertion sort is stable, preserving intra-cluster glyph order.
+        std.sort.insertion(font.shape.Cell, self.cell_buf.items, {}, struct {
+            fn lessThan(_: void, a: font.shape.Cell, b: font.shape.Cell) bool {
+                return a.x < b.x;
+            }
+        }.lessThan);
+
+        // Post-process: apply carry-over adjustment and compute cell_advance.
+        //
+        // For complex scripts (Devanagari, etc.), glyph advances from the
+        // font don't match the terminal's cell grid. A conjunct may consume
+        // characters from multiple cells, leaving gaps. We compute a
+        // cumulative adjustment that shifts subsequent glyphs to fill these
+        // gaps, based on the difference between each cluster's actual advance
+        // and the expected cell-width advance.
+        if (self.cell_buf.items.len > 0 and ct_cell_width > 0) {
+            var cumulative_adj: f64 = 0;
+            var ci: usize = 0;
+            while (ci < self.cell_buf.items.len) {
+                const current_cluster = self.cell_buf.items[ci].x;
+
+                // Find extent of this cluster group
+                var cj = ci + 1;
+                while (cj < self.cell_buf.items.len and self.cell_buf.items[cj].x == current_cluster) {
+                    cj += 1;
+                }
+
+                // The total advance for this cluster
+                const cluster_total_advance = cluster_offsets_x[current_cluster];
+
+                // Determine gap to next cluster (or end of run)
+                const next_cluster: u16 = if (cj < self.cell_buf.items.len)
+                    self.cell_buf.items[cj].x
+                else
+                    run.cells;
+                const cells_spanned: f64 = @floatFromInt(next_cluster - current_cluster);
+                const expected_advance = cells_spanned * ct_cell_width;
+
+                // Set cell_advance for the first glyph of this cluster
+                if (next_cluster > current_cluster) {
+                    self.cell_buf.items[ci].cell_advance = next_cluster - current_cluster;
+                }
+
+                // Apply cumulative adjustment to all glyphs in this cluster
+                const adj_i16: i16 = @intFromFloat(@round(cumulative_adj));
+                for (ci..cj) |k| {
+                    self.cell_buf.items[k].x_offset +|= adj_i16;
+                }
+
+                // Update cumulative adjustment:
+                // If this cluster's advance was wider than expected, subsequent
+                // glyphs shift right (positive). If narrower, they shift left
+                // (negative, filling gaps from consumed cells).
+                cumulative_adj += cluster_total_advance - expected_advance;
+
+                ci = cj;
             }
         }
 

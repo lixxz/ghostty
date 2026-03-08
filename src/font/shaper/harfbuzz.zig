@@ -151,10 +151,22 @@ pub const Shaper = struct {
                 .cluster = info_v.cluster,
             };
 
+            // Calculate the pixel advance for this glyph and determine
+            // how many grid cells it spans. For most glyphs this is 1,
+            // but complex text shaping (e.g. Devanagari conjuncts) can
+            // produce glyphs that span multiple cells.
+            const pixel_advance: u32 = @intCast(@max(0, (pos_v.x_advance + 0b100_000) >> 6));
+            const cell_width = run.grid.metrics.cell_width;
+            const cell_advance: u16 = if (cell_width > 0)
+                @intCast(@max(1, (pixel_advance + cell_width / 2) / cell_width))
+            else
+                1;
+
             try self.cell_buf.append(self.alloc, .{
                 .x = @intCast(info_v.cluster),
                 .x_offset = @intCast(cell_offset.x),
                 .y_offset = @intCast(cell_offset.y),
+                .cell_advance = cell_advance,
                 .glyph_index = info_v.codepoint,
             });
 
