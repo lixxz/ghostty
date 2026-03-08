@@ -19,7 +19,7 @@ struct NewTerminalIntent: AppIntent {
 
     @Parameter(
         title: "Command",
-        description: "Command to execute within your configured shell.",
+        description: "Command to execute within your configured shell."
     )
     var command: String?
 
@@ -45,8 +45,10 @@ struct NewTerminalIntent: AppIntent {
 
     // Performing in the background can avoid opening multiple windows at the same time
     // using `foreground` will cause `perform` and `AppDelegate.applicationDidBecomeActive(_:)`/`AppDelegate.applicationShouldHandleReopen(_:hasVisibleWindows:)` running at the 'same' time
+    #if compiler(>=6.2)
     @available(macOS 26.0, *)
     static var supportedModes: IntentModes = .background
+    #endif
 
     @available(macOS, obsoleted: 26.0, message: "Replaced by supportedModes")
     static var openAppWhenRun = false

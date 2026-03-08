@@ -24,15 +24,17 @@ struct InputTextIntent: AppIntent {
     )
     var terminal: TerminalEntity
 
+    #if compiler(>=6.2)
     @available(macOS 26.0, *)
     static var supportedModes: IntentModes = [.background, .foreground]
+    #endif
 
     @MainActor
     func perform() async throws -> some IntentResult {
         guard await requestIntentPermission() else {
             throw GhosttyIntentError.permissionDenied
         }
-        
+
         guard let surface = terminal.surfaceModel else {
             throw GhosttyIntentError.surfaceNotFound
         }
@@ -74,15 +76,17 @@ struct KeyEventIntent: AppIntent {
     )
     var terminal: TerminalEntity
 
+    #if compiler(>=6.2)
     @available(macOS 26.0, *)
     static var supportedModes: IntentModes = [.background, .foreground]
+    #endif
 
     @MainActor
     func perform() async throws -> some IntentResult {
         guard await requestIntentPermission() else {
             throw GhosttyIntentError.permissionDenied
         }
-        
+
         guard let surface = terminal.surfaceModel else {
             throw GhosttyIntentError.surfaceNotFound
         }
@@ -91,7 +95,7 @@ struct KeyEventIntent: AppIntent {
         let ghosttyMods = mods.reduce(Ghostty.Input.Mods()) { result, mod in
             result.union(mod.ghosttyMod)
         }
-        
+
         let keyEvent = Ghostty.Input.KeyEvent(
             key: key,
             action: action,
@@ -136,15 +140,17 @@ struct MouseButtonIntent: AppIntent {
     )
     var terminal: TerminalEntity
 
+    #if compiler(>=6.2)
     @available(macOS 26.0, *)
     static var supportedModes: IntentModes = [.background, .foreground]
+    #endif
 
     @MainActor
     func perform() async throws -> some IntentResult {
         guard await requestIntentPermission() else {
             throw GhosttyIntentError.permissionDenied
         }
-        
+
         guard let surface = terminal.surfaceModel else {
             throw GhosttyIntentError.surfaceNotFound
         }
@@ -153,7 +159,7 @@ struct MouseButtonIntent: AppIntent {
         let ghosttyMods = mods.reduce(Ghostty.Input.Mods()) { result, mod in
             result.union(mod.ghosttyMod)
         }
-        
+
         let mouseEvent = Ghostty.Input.MouseButtonEvent(
             action: action,
             button: button,
@@ -197,15 +203,17 @@ struct MousePosIntent: AppIntent {
     )
     var terminal: TerminalEntity
 
+    #if compiler(>=6.2)
     @available(macOS 26.0, *)
     static var supportedModes: IntentModes = [.background, .foreground]
+    #endif
 
     @MainActor
     func perform() async throws -> some IntentResult {
         guard await requestIntentPermission() else {
             throw GhosttyIntentError.permissionDenied
         }
-        
+
         guard let surface = terminal.surfaceModel else {
             throw GhosttyIntentError.surfaceNotFound
         }
@@ -214,7 +222,7 @@ struct MousePosIntent: AppIntent {
         let ghosttyMods = mods.reduce(Ghostty.Input.Mods()) { result, mod in
             result.union(mod.ghosttyMod)
         }
-        
+
         let mousePosEvent = Ghostty.Input.MousePosEvent(
             x: x,
             y: y,
@@ -265,15 +273,17 @@ struct MouseScrollIntent: AppIntent {
     )
     var terminal: TerminalEntity
 
+    #if compiler(>=6.2)
     @available(macOS 26.0, *)
     static var supportedModes: IntentModes = [.background, .foreground]
+    #endif
 
     @MainActor
     func perform() async throws -> some IntentResult {
         guard await requestIntentPermission() else {
             throw GhosttyIntentError.permissionDenied
         }
-        
+
         guard let surface = terminal.surfaceModel else {
             throw GhosttyIntentError.surfaceNotFound
         }
